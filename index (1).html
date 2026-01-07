@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒子轨迹</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.544.0/dist/umd/lucide.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#000000',
+                        background: '#F5F5F5'
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            body {
+                overflow: hidden;
+                background-color: #F5F5F5;
+                position: relative;
+            }
+            
+            /* 半色调网点滤镜 */
+            body::after {
+                content: "";
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                opacity: 0.15;
+                z-index: 15;
+                background-image: radial-gradient(circle, #000 1px, transparent 1px);
+                background-size: 20px 20px;
+                background-position: 0 0;
+            }
+            canvas {
+                display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+            .controls {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 10;
+                opacity: 0.3;
+                transition: opacity 0.3s ease;
+            }
+            .controls:hover {
+                opacity: 1;
+            }
+            .control-button {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background-color: rgba(255, 255, 255, 0.8);
+                border: 1px solid #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                margin-bottom: 10px;
+                transition: transform 0.2s ease, background-color 0.2s ease;
+            }
+            .control-button:hover {
+                transform: scale(1.1);
+                background-color: rgba(255, 255, 255, 1);
+            }
+            .tooltip {
+                position: absolute;
+                right: 50px;
+                background-color: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 5px 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                white-space: nowrap;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+            }
+            .control-button:hover .tooltip {
+                opacity: 1;
+            }
+            
+            .text-container {
+                position: fixed;
+                bottom: 30px;
+                left: 0;
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                z-index: 5;
+            }
+            
+            .bottom-text {
+                font-family: SimSun, serif;
+                font-size: 18px;
+                color: #000000;
+                margin: 0;
+                padding: 5px;
+            }
+            
+            .calligraphy-container {
+                position: fixed;
+                bottom: 10px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 5;
+                opacity: 0.8;
+                transition: opacity 0.3s ease;
+            }
+            
+            .calligraphy-container:hover {
+                opacity: 1;
+            }
+            
+            .calligraphy-image {
+                max-width: 250px;
+                height: auto;
+                background: transparent;
+                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+            }
+            
+            @media (max-width: 768px) {
+                .calligraphy-image {
+                    max-width: 180px;
+                }
+                .bottom-text {
+                    font-size: 16px;
+                }
+            }
+        }
+    </style>
+</head>
+<body class="bg-background">
+    <canvas id="particleCanvas"></canvas>
+    
+    <div class="text-container">
+        <p class="bottom-text">Figments in Human Form</p>
+    </div>
+    
+    <!-- 书法字容器 -->
+    <div class="calligraphy-container">
+        <img src="https://p3-flow-imagex-download-sign.byteimg.com/tos-cn-i-a9rns2rl98/b2d0529aa5834dbeba66825917b0047c.png~tplv-a9rns2rl98-24:720:720.png?rcl=20260107135336EEF321C5DBCA83178D08&rk3s=8e244e95&rrcfp=8a172a1a&x-expires=1768370016&x-signature=mgpiRTpZHJASOv6lrVDd9cmQPgg%3D" 
+             alt="人形风景" 
+             class="calligraphy-image">
+    </div>
+    </div>
+    
+    <div class="controls">
+        <div class="control-button" id="resetButton" title="重置">
+            <i data-lucide="refresh-cw"></i>
+            <span class="tooltip">重置</span>
+        </div>
+        <div class="control-button" id="particleCountButton" title="增加粒子数">
+            <i data-lucide="plus"></i>
+            <span class="tooltip">增加粒子数</span>
+        </div>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // 获取Canvas元素和上下文
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 设置Canvas尺寸为窗口大小
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        // 初始化时调整Canvas尺寸
+        resizeCanvas();
+        
+        // 窗口大小改变时重新调整Canvas尺寸
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 监听鼠标滚轮事件，用于调整粒子大小
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // 根据滚轮方向调整粒子大小
+            const sizeChange = e.deltaY > 0 ? -0.1 : 0.1;
+            const newSize = Math.max(0.5, Math.min(5, config.particleSize + sizeChange));
+            
+            // 更新配置
+            config.particleSize = newSize;
+            
+            // 更新所有粒子的大小
+            particles.forEach(particle => {
+                particle.size = config.particleSize * (Math.random() * 0.5 + 0.5);
+            });
+        });
+
+        // 粒子系统配置
+        let config = {
+            particleCount: 100,
+            particleSize: 2,
+            trailLength: 50,
+            baseSpeed: 0.5,
+            followStrength: 0.02,
+            decayRate: 0.02,
+            jitterAmount: 0.2,
+            // 连接线相关配置
+            connectionDistance: 120,  // 粒子间连接的最大距离
+            connectionStrength: 0.5,  // 连接线的基础透明度
+            connectionWidth: 1.5      // 连接线的宽度
+        };
+
+        // 创建粒子数组
+        let particles = [];
+        
+        // 鼠标位置
+        let mouse = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            isDown: false,
+            prevX: 0,
+            prevY: 0
+        };
+
+        // 初始化粒子
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < config.particleCount; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: config.particleSize * (Math.random() * 0.5 + 0.5),
+                    speedX: (Math.random() - 0.5) * config.baseSpeed,
+                    speedY: (Math.random() - 0.5) * config.baseSpeed,
+                    trail: [],
+                    alpha: Math.random() * 0.5 + 0.5,
+                    targetX: 0,
+                    targetY: 0,
+                    followFactor: Math.random() * 0.5 + 0.5
+                });
+            }
+        }
+
+        // 初始化粒子
+        initParticles();
+
+        // 鼠标事件监听
+        window.addEventListener('mousedown', (e) => {
+            mouse.isDown = true;
+            mouse.prevX = e.clientX;
+            mouse.prevY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            mouse.isDown = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            
+            // 如果鼠标按下，更新粒子目标位置
+            if (mouse.isDown) {
+                // 计算鼠标移动方向和速度
+                const dx = mouse.x - mouse.prevX;
+                const dy = mouse.y - mouse.prevY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // 为每个粒子设置目标位置，基于鼠标位置和移动
+                particles.forEach(particle => {
+                    // 添加一些随机性，使粒子轨迹更自然
+                    const randomOffsetX = (Math.random() - 0.5) * 100;
+                    const randomOffsetY = (Math.random() - 0.5) * 100;
+                    
+                    // 设置目标位置，加入一些随机性
+                    particle.targetX = mouse.x + randomOffsetX;
+                    particle.targetY = mouse.y + randomOffsetY;
+                    
+                    // 根据鼠标移动速度调整跟随强度
+                    const speedInfluence = Math.min(distance * 0.01, 1);
+                    particle.followFactor = config.followStrength * (speedInfluence + 0.5);
+                });
+            }
+            
+            mouse.prevX = mouse.x;
+            mouse.prevY = mouse.y;
+        });
+
+        // 触摸事件支持
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            mouse.isDown = true;
+            mouse.x = touch.clientX;
+            mouse.y = touch.clientY;
+            mouse.prevX = mouse.x;
+            mouse.prevY = mouse.y;
+        });
+
+        window.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            mouse.isDown = false;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            mouse.x = touch.clientX;
+            mouse.y = touch.clientY;
+            
+            // 如果触摸中，更新粒子目标位置
+            if (mouse.isDown) {
+                // 计算触摸移动方向和速度
+                const dx = mouse.x - mouse.prevX;
+                const dy = mouse.y - mouse.prevY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // 为每个粒子设置目标位置，基于触摸位置和移动
+                particles.forEach(particle => {
+                    // 添加一些随机性，使粒子轨迹更自然
+                    const randomOffsetX = (Math.random() - 0.5) * 100;
+                    const randomOffsetY = (Math.random() - 0.5) * 100;
+                    
+                    // 设置目标位置，加入一些随机性
+                    particle.targetX = mouse.x + randomOffsetX;
+                    particle.targetY = mouse.y + randomOffsetY;
+                    
+                    // 根据触摸移动速度调整跟随强度
+                    const speedInfluence = Math.min(distance * 0.01, 1);
+                    particle.followFactor = config.followStrength * (speedInfluence + 0.5);
+                });
+            }
+            
+            mouse.prevX = mouse.x;
+            mouse.prevY = mouse.y;
+        });
+
+        // 控制按钮事件监听
+        document.getElementById('resetButton').addEventListener('click', () => {
+            initParticles();
+        });
+
+        document.getElementById('particleCountButton').addEventListener('click', () => {
+            config.particleCount = Math.min(config.particleCount + 50, 500);
+            initParticles();
+        });
+
+
+
+        // 动画循环
+        function animate() {
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 只有在鼠标未点击时才绘制连接线
+            if (!mouse.isDown) {
+                // 绘制粒子间的连接线
+                drawConnections();
+            }
+            
+            // 更新和绘制每个粒子
+            particles.forEach(particle => {
+                // 只有在鼠标点击时才保存轨迹
+                if (mouse.isDown) {
+                    // 保存当前位置到轨迹
+                    particle.trail.push({
+                        x: particle.x,
+                        y: particle.y,
+                        alpha: particle.alpha
+                    });
+                    
+                    // 限制轨迹长度
+                    if (particle.trail.length > config.trailLength) {
+                        particle.trail.shift();
+                    }
+                    
+                    // 更新轨迹点的透明度
+                    particle.trail.forEach((point, index) => {
+                        point.alpha = particle.alpha * (index / particle.trail.length);
+                    });
+                } else {
+                    // 鼠标未点击时清空轨迹
+                    particle.trail = [];
+                }
+                
+                // 如果鼠标按下，粒子向目标位置移动
+                if (mouse.isDown) {
+                    // 计算到目标位置的方向
+                    const dx = particle.targetX - particle.x;
+                    const dy = particle.targetY - particle.y;
+                    
+                    // 应用跟随力
+                    particle.speedX += dx * particle.followFactor;
+                    particle.speedY += dy * particle.followFactor;
+                }
+                
+                // 添加一些随机抖动，使粒子运动更自然
+                particle.speedX += (Math.random() - 0.5) * config.jitterAmount;
+                particle.speedY += (Math.random() - 0.5) * config.jitterAmount;
+                
+                // 应用速度衰减
+                particle.speedX *= (1 - config.decayRate);
+                particle.speedY *= (1 - config.decayRate);
+                
+                // 更新位置
+                particle.x += particle.speedX;
+                particle.y += particle.speedY;
+                
+                // 边界检查，使粒子在画布内反弹
+                if (particle.x < 0 || particle.x > canvas.width) {
+                    particle.speedX *= -0.8;
+                    particle.x = Math.max(0, Math.min(canvas.width, particle.x));
+                }
+                
+                if (particle.y < 0 || particle.y > canvas.height) {
+                    particle.speedY *= -0.8;
+                    particle.y = Math.max(0, Math.min(canvas.height, particle.y));
+                }
+                
+                // 绘制轨迹
+                if (particle.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(particle.trail[0].x, particle.trail[0].y);
+                    
+                    for (let i = 1; i < particle.trail.length; i++) {
+                        ctx.lineTo(particle.trail[i].x, particle.trail[i].y);
+                    }
+                    
+                    ctx.strokeStyle = `rgba(0, 0, 0, ${particle.alpha * 0.3})`;
+                    ctx.lineWidth = particle.size * 0.8;
+                    ctx.stroke();
+                }
+                
+                // 绘制粒子
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 0, 0, ${particle.alpha})`;
+                ctx.fill();
+            });
+            
+            // 请求下一帧动画
+            requestAnimationFrame(animate);
+        }
+
+        // 绘制粒子间连接线的函数
+        function drawConnections() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // 如果粒子距离在连接范围内，绘制连接线
+                    if (distance < config.connectionDistance) {
+                        // 计算连接线的透明度，基于距离
+                        const alpha = (1 - distance / config.connectionDistance) * config.connectionStrength;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = `rgba(0, 0, 0, ${alpha * 0.3})`;
+                        ctx.lineWidth = config.connectionWidth;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        
+        // 开始动画
+        animate();
+    </script>
+</body>
+</html>
